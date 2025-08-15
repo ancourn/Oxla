@@ -7,6 +7,10 @@ import EmailProvider from "next-auth/providers/email"
 import { db } from "@/lib/db"
 import bcrypt from "bcryptjs"
 import { sendMagicLinkEmail, sendPasswordResetEmail } from "@/lib/email"
+import { initializeServices } from "@/lib/services"
+
+// Initialize services on module load
+initializeServices()
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db),

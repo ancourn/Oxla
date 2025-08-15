@@ -1,6 +1,7 @@
 // server.ts - Next.js Standalone + Socket.IO
 import { setupSocket } from '@/lib/socket';
 import { cleanupScheduler } from '@/lib/cleanup-scheduler';
+import { startHealthMonitoring } from '@/lib/socket';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import next from 'next';
@@ -8,6 +9,9 @@ import next from 'next';
 const dev = process.env.NODE_ENV !== 'production';
 const currentPort = 3000;
 const hostname = '0.0.0.0';
+
+// Global io instance for external modules
+export let io: Server | null = null;
 
 // Custom server with Socket.IO integration
 async function createCustomServer() {
@@ -33,7 +37,7 @@ async function createCustomServer() {
     });
 
     // Setup Socket.IO
-    const io = new Server(server, {
+    io = new Server(server, {
       path: '/api/socketio',
       cors: {
         origin: "*",
@@ -51,6 +55,12 @@ async function createCustomServer() {
       // Start cleanup scheduler
       cleanupScheduler.start();
       console.log('> Cleanup scheduler started');
+      
+      // Start health monitoring
+      if (io) {
+        startHealthMonitoring(io);
+        console.log('> Health monitoring started');
+      }
     });
 
   } catch (err) {

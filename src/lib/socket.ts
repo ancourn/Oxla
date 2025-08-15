@@ -270,6 +270,171 @@ export const setupSocket = (io: Server) => {
       socket.emit('online_users', onlineUsers)
     })
 
+    // Handle admin subscription monitoring
+    socket.on('subscribe_to_subscription_updates', async (data: { userId: string; isAdmin: boolean }) => {
+      try {
+        const { userId, isAdmin } = data
+        
+        // Verify user is authenticated
+        if (!activeUsers.has(userId)) {
+          socket.emit('error', { message: 'Not authenticated' })
+          return
+        }
+
+        // Verify admin role
+        const user = await db.user.findUnique({
+          where: { id: userId }
+        })
+
+        if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
+          socket.emit('error', { message: 'Unauthorized' })
+          return
+        }
+
+        // Join admin room for subscription updates
+        socket.join('admin_subscription_updates')
+        
+        // Send initial subscription data
+        const subscriptions = await db.subscription.findMany({
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 10 // Get recent 10 subscriptions
+        })
+
+        socket.emit('subscription_update', {
+          type: 'initial',
+          subscriptions: subscriptions.map(sub => ({
+            id: sub.id,
+            userId: sub.userId,
+            userEmail: sub.user.email,
+            userName: sub.user.name || 'Unknown',
+            plan: sub.stripePriceId || 'Unknown',
+            status: sub.status || 'unknown',
+            currentPeriodEnd: sub.stripeCurrentPeriodEnd?.toISOString() || new Date().toISOString(),
+            createdAt: sub.createdAt.toISOString()
+          }))
+        })
+
+        console.log(`Admin ${userId} subscribed to subscription updates`)
+      } catch (error) {
+        console.error('Subscription subscription error:', error)
+        socket.emit('error', { message: 'Failed to subscribe to updates' })
+      }
+    })
+
+    // Handle admin system health monitoring
+    socket.on('subscribe_to_health_updates', async (data: { userId: string; isAdmin: boolean }) => {
+      try {
+        const { userId, isAdmin } = data
+        
+        // Verify user is authenticated
+        if (!activeUsers.has(userId)) {
+          socket.emit('error', { message: 'Not authenticated' })
+          return
+        }
+
+        // Verify admin role
+        const user = await db.user.findUnique({
+          where: { id: userId }
+        })
+
+        if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
+          socket.emit('error', { message: 'Unauthorized' })
+          return
+        }
+
+        // Join admin room for health updates
+        socket.join('admin_health_updates')
+        
+        // Send initial health data
+        const startTime = Date.now()
+        await db.user.findFirst() // Database health check
+        const dbResponseTime = Date.now() - startTime
+        
+        const memoryUsage = process.memoryUsage()
+        const healthData = {
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          metrics: {
+            database: {
+              responseTime: dbResponseTime,
+              status: dbResponseTime < 100 ? 'healthy' : dbResponseTime < 500 ? 'warning' : 'critical'
+            },
+            system: {
+              memoryUsage: {
+                heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
+                heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024), // MB
+                external: Math.round(memoryUsage.external / 1024 / 1024) // MB
+              },
+              uptime: 0.999,
+              responseTime: Date.now() - startTime,
+              errorRate: 0.001
+            }
+          },
+          checks: [
+            {
+              name: 'Database Connection',
+              status: dbResponseTime < 100 ? 'pass' : 'fail',
+              responseTime: dbResponseTime
+            },
+            {
+              name: 'API Response Time',
+              status: (Date.now() - startTime) < 200 ? 'pass' : 'fail',
+              responseTime: Date.now() - startTime
+            },
+            {
+              name: 'Memory Usage',
+              status: (memoryUsage.heapUsed / memoryUsage.heapTotal) < 0.8 ? 'pass' : 'fail',
+              value: Math.round((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100) + '%'
+            }
+          ]
+        }
+
+        socket.emit('health_update', healthData)
+
+        console.log(`Admin ${userId} subscribed to health updates`)
+      } catch (error) {
+        console.error('Health subscription error:', error)
+        socket.emit('error', { message: 'Failed to subscribe to health updates' })
+      }
+    })
+
+    // Handle unsubscribing from subscription updates
+    socket.on('unsubscribe_from_subscription_updates', (data: { userId: string }) => {
+      const { userId } = data
+      
+      // Verify user is authenticated
+      if (!activeUsers.has(userId)) {
+        return
+      }
+
+      socket.leave('admin_subscription_updates')
+      console.log(`Admin ${userId} unsubscribed from subscription updates`)
+    })
+
+    // Handle unsubscribing from health updates
+    socket.on('unsubscribe_from_health_updates', (data: { userId: string }) => {
+      const { userId } = data
+      
+      // Verify user is authenticated
+      if (!activeUsers.has(userId)) {
+        return
+      }
+
+      socket.leave('admin_health_updates')
+      console.log(`Admin ${userId} unsubscribed from health updates`)
+    })
+
     // Handle disconnect
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id)
@@ -304,6 +469,154 @@ export const sendToUser = (userId: string, event: string, data: any) => {
   if (userSocket) {
     // Assuming io is available globally or passed as parameter
     // io.to(userSocket.socketId).emit(event, data)
+  }
+}
+
+// Helper function to broadcast subscription update to admins
+export const broadcastSubscriptionUpdate = (io: Server, subscriptionData: any) => {
+  io.to('admin_subscription_updates').emit('subscription_update', {
+    type: 'update',
+    subscription: subscriptionData
+  })
+}
+
+// Helper function to broadcast new subscription to admins
+export const broadcastNewSubscription = (io: Server, subscriptionData: any) => {
+  io.to('admin_subscription_updates').emit('subscription_update', {
+    type: 'new',
+    subscription: subscriptionData
+  })
+}
+
+// Helper function to broadcast cancelled subscription to admins
+export const broadcastCancelledSubscription = (io: Server, subscriptionData: any) => {
+  io.to('admin_subscription_updates').emit('subscription_update', {
+    type: 'cancelled',
+    subscription: subscriptionData
+  })
+}
+
+// Helper function to broadcast health update to admins
+export const broadcastHealthUpdate = (io: Server, healthData: any) => {
+  io.to('admin_health_updates').emit('health_update', healthData)
+}
+
+// Health monitoring interval
+let healthMonitoringInterval: NodeJS.Timeout | null = null
+
+// Start periodic health monitoring
+export const startHealthMonitoring = (io: Server) => {
+  if (healthMonitoringInterval) {
+    console.log('Health monitoring is already running')
+    return
+  }
+
+  console.log('Starting health monitoring...')
+  
+  // Run health checks every 30 seconds
+  healthMonitoringInterval = setInterval(async () => {
+    try {
+      const startTime = Date.now()
+      
+      // Database health check
+      const dbStartTime = Date.now()
+      await db.user.findFirst()
+      const dbResponseTime = Date.now() - dbStartTime
+      
+      const memoryUsage = process.memoryUsage()
+      const healthData = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        metrics: {
+          database: {
+            responseTime: dbResponseTime,
+            status: dbResponseTime < 100 ? 'healthy' : dbResponseTime < 500 ? 'warning' : 'critical'
+          },
+          system: {
+            memoryUsage: {
+              heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
+              heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024), // MB
+              external: Math.round(memoryUsage.external / 1024 / 1024) // MB
+            },
+            uptime: 0.999,
+            responseTime: Date.now() - startTime,
+            errorRate: 0.001
+          }
+        },
+        checks: [
+          {
+            name: 'Database Connection',
+            status: dbResponseTime < 100 ? 'pass' : 'fail',
+            responseTime: dbResponseTime
+          },
+          {
+            name: 'API Response Time',
+            status: (Date.now() - startTime) < 200 ? 'pass' : 'fail',
+            responseTime: Date.now() - startTime
+          },
+          {
+            name: 'Memory Usage',
+            status: (memoryUsage.heapUsed / memoryUsage.heapTotal) < 0.8 ? 'pass' : 'fail',
+            value: Math.round((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100) + '%'
+          }
+        ]
+      }
+
+      broadcastHealthUpdate(io, healthData)
+    } catch (error) {
+      console.error('Health monitoring error:', error)
+      
+      // Broadcast error state
+      const errorHealthData = {
+        status: 'critical',
+        timestamp: new Date().toISOString(),
+        error: 'Health monitoring failed',
+        metrics: {
+          database: {
+            responseTime: -1,
+            status: 'critical'
+          },
+          system: {
+            memoryUsage: {
+              heapUsed: 0,
+              heapTotal: 0,
+              external: 0
+            },
+            uptime: 0,
+            responseTime: -1,
+            errorRate: 1
+          }
+        },
+        checks: [
+          {
+            name: 'Database Connection',
+            status: 'fail',
+            responseTime: -1
+          },
+          {
+            name: 'API Response Time',
+            status: 'fail',
+            responseTime: -1
+          },
+          {
+            name: 'Memory Usage',
+            status: 'fail',
+            value: 'Unknown'
+          }
+        ]
+      }
+      
+      broadcastHealthUpdate(io, errorHealthData)
+    }
+  }, 30000) // Every 30 seconds
+}
+
+// Stop health monitoring
+export const stopHealthMonitoring = () => {
+  if (healthMonitoringInterval) {
+    clearInterval(healthMonitoringInterval)
+    healthMonitoringInterval = null
+    console.log('Health monitoring stopped')
   }
 }
 

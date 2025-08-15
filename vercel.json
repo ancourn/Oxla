@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "name": "oxla",
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ],
+  "env": {
+    "NEXTAUTH_URL": "https://oxlas.com",
+    "DATABASE_URL": "@database_url",
+    "RESEND_API_KEY": "@resend_api_key",
+    "STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key",
+    "STRIPE_SECRET_KEY": "@stripe_secret_key",
+    "STRIPE_WEBHOOK_SECRET": "@stripe_webhook_secret",
+    "NEXTAUTH_SECRET": "@nextauth_secret"
+  },
+  "build": {
+    "env": {
+      "NEXTAUTH_URL": "https://oxlas.com"
+    }
+  }
+}

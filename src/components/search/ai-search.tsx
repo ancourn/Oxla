@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 import { 
   Search, 
   Sparkles, 
@@ -345,11 +347,8 @@ export function AISearch({ user }: AISearchProps) {
           mimeType = 'application/json'
           break
         case 'pdf':
-          // For PDF, we'll create a simple HTML version that can be printed as PDF
-          content = generateHTMLReport(resultsToExport, query, aiInsights)
-          filename = `search-results-${Date.now()}.html`
-          mimeType = 'text/html'
-          break
+          await generatePDFReport(resultsToExport, query, aiInsights)
+          return // generatePDFReport handles the download directly
         default:
           throw new Error('Unsupported export format')
       }
@@ -443,6 +442,61 @@ export function AISearch({ user }: AISearchProps) {
 </body>
 </html>
     `
+  }
+
+  const generatePDFReport = async (results: SearchResult[], query: string, insights: string) => {
+    try {
+      // Create HTML content for the PDF
+      const htmlContent = generateHTMLReport(results, query, insights)
+      
+      // Create a temporary div to render the HTML
+      const tempDiv = document.createElement('div')
+      tempDiv.innerHTML = htmlContent
+      tempDiv.style.width = '210mm' // A4 width
+      tempDiv.style.padding = '20mm'
+      tempDiv.style.fontFamily = 'Arial, sans-serif'
+      tempDiv.style.fontSize = '12px'
+      tempDiv.style.lineHeight = '1.5'
+      tempDiv.style.position = 'absolute'
+      tempDiv.style.left = '-9999px'
+      document.body.appendChild(tempDiv)
+
+      // Convert the HTML to canvas
+      const canvas = await html2canvas(tempDiv, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        width: 794, // A4 width in pixels at 96 DPI
+        windowWidth: 794
+      })
+
+      // Remove the temporary div
+      document.body.removeChild(tempDiv)
+
+      // Create PDF
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const imgData = canvas.toDataURL('image/png')
+      
+      // Calculate dimensions to fit the page
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+      const imgWidth = canvas.width
+      const imgHeight = canvas.height
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight)
+      const imgX = (pdfWidth - imgWidth * ratio) / 2
+      const imgY = 10
+
+      // Add the image to PDF
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
+
+      // Save the PDF
+      const filename = `search-results-${Date.now()}.pdf`
+      pdf.save(filename)
+      
+    } catch (error) {
+      console.error('PDF generation failed:', error)
+      alert('Failed to generate PDF. Please try again.')
+    }
   }
 
   return (
@@ -590,7 +644,7 @@ export function AISearch({ user }: AISearchProps) {
                       <SelectContent>
                         <SelectItem value="csv">CSV</SelectItem>
                         <SelectItem value="json">JSON</SelectItem>
-                        <SelectItem value="pdf">HTML</SelectItem>
+                        <SelectItem value="pdf">PDF</SelectItem>
                       </SelectContent>
                     </Select>
                     <Button variant="outline" size="sm" onClick={exportResults}>

@@ -1,0 +1,19 @@
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "npm start",
+    "healthcheckPath": "/api/health"
+  },
+  "env": {
+    "NODE_ENV": "production",
+    "DATABASE_URL": "${{DATABASE_URL}}",
+    "NEXTAUTH_URL": "https://oxlas.com",
+    "RESEND_API_KEY": "${{RESEND_API_KEY}}",
+    "STRIPE_PUBLISHABLE_KEY": "${{STRIPE_PUBLISHABLE_KEY}}",
+    "STRIPE_SECRET_KEY": "${{STRIPE_SECRET_KEY}}",
+    "STRIPE_WEBHOOK_SECRET": "${{STRIPE_WEBHOOK_SECRET}}",
+    "NEXTAUTH_SECRET": "${{NEXTAUTH_SECRET}}"
+  }
+}

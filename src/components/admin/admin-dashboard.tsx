@@ -81,12 +81,28 @@ interface SystemMetrics {
   responseTime: number
   errorRate: number
   activeConnections: number
+  subscriptionStatuses: {
+    active: number
+    past_due: number
+    cancelled: number
+    incomplete: number
+    trialing: number
+  }
   recentAlerts: Array<{
     id: string
     type: 'error' | 'warning' | 'info'
     message: string
     timestamp: string
     resolved: boolean
+  }>
+  recentSubscriptions: Array<{
+    id: string
+    userName: string
+    userEmail: string
+    plan: string
+    status: string
+    createdAt: string
+    amount: number
   }>
 }
 
@@ -562,6 +578,84 @@ export function AdminDashboard({ user }: AdminDashboardProps) {
           </TabsContent>
 
           <TabsContent value="subscriptions" className="space-y-6">
+            {/* Live Subscription Status */}
+            {systemMetrics && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Live Subscription Status</CardTitle>
+                  <CardDescription>
+                    Real-time subscription metrics and status breakdown
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">{systemMetrics.subscriptionStatuses.active}</div>
+                      <div className="text-sm text-muted-foreground">Active</div>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-yellow-600">{systemMetrics.subscriptionStatuses.past_due}</div>
+                      <div className="text-sm text-muted-foreground">Past Due</div>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-gray-600">{systemMetrics.subscriptionStatuses.cancelled}</div>
+                      <div className="text-sm text-muted-foreground">Cancelled</div>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-orange-600">{systemMetrics.subscriptionStatuses.incomplete}</div>
+                      <div className="text-sm text-muted-foreground">Incomplete</div>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">{systemMetrics.subscriptionStatuses.trialing}</div>
+                      <div className="text-sm text-muted-foreground">Trialing</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Recent Subscription Activity */}
+            {systemMetrics && systemMetrics.recentSubscriptions.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Subscription Activity</CardTitle>
+                  <CardDescription>
+                    Latest subscription changes in the last 24 hours
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-64">
+                    <div className="space-y-2">
+                      {systemMetrics.recentSubscriptions.map((sub) => (
+                        <div key={sub.id} className="border rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium">{sub.userName}</span>
+                                <Badge variant="outline" className={`text-white ${getStatusColor(sub.status)}`}>
+                                  {sub.status}
+                                </Badge>
+                                <Badge variant="secondary">{sub.plan}</Badge>
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {sub.userEmail}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-medium">{formatCurrency(sub.amount)}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(sub.createdAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Subscription Management</CardTitle>
@@ -622,9 +716,10 @@ export function AdminDashboard({ user }: AdminDashboardProps) {
           <TabsContent value="system" className="space-y-6">
             {systemMetrics && (
               <>
+                {/* System Health Overview */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>System Health</CardTitle>
+                    <CardTitle>System Health Overview</CardTitle>
                     <CardDescription>
                       Current system performance and metrics
                     </CardDescription>
@@ -632,29 +727,126 @@ export function AdminDashboard({ user }: AdminDashboardProps) {
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="text-center p-4 border rounded-lg">
-                        <div className="text-2xl font-bold text-green-600">{(systemMetrics.uptime * 100).toFixed(1)}%</div>
+                        <div className={`text-2xl font-bold ${systemMetrics.uptime >= 0.99 ? 'text-green-600' : systemMetrics.uptime >= 0.95 ? 'text-yellow-600' : 'text-red-600'}`}>
+                          {(systemMetrics.uptime * 100).toFixed(1)}%
+                        </div>
                         <div className="text-sm text-muted-foreground">Uptime</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {systemMetrics.uptime >= 0.99 ? 'Excellent' : systemMetrics.uptime >= 0.95 ? 'Good' : 'Poor'}
+                        </div>
                       </div>
                       <div className="text-center p-4 border rounded-lg">
-                        <div className="text-2xl font-bold">{systemMetrics.responseTime}ms</div>
+                        <div className={`text-2xl font-bold ${systemMetrics.responseTime < 200 ? 'text-green-600' : systemMetrics.responseTime < 500 ? 'text-yellow-600' : 'text-red-600'}`}>
+                          {systemMetrics.responseTime}ms
+                        </div>
                         <div className="text-sm text-muted-foreground">Response Time</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {systemMetrics.responseTime < 200 ? 'Fast' : systemMetrics.responseTime < 500 ? 'Normal' : 'Slow'}
+                        </div>
                       </div>
                       <div className="text-center p-4 border rounded-lg">
-                        <div className="text-2xl font-bold">{(systemMetrics.errorRate * 100).toFixed(2)}%</div>
+                        <div className={`text-2xl font-bold ${systemMetrics.errorRate < 0.01 ? 'text-green-600' : systemMetrics.errorRate < 0.05 ? 'text-yellow-600' : 'text-red-600'}`}>
+                          {(systemMetrics.errorRate * 100).toFixed(2)}%
+                        </div>
                         <div className="text-sm text-muted-foreground">Error Rate</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {systemMetrics.errorRate < 0.01 ? 'Low' : systemMetrics.errorRate < 0.05 ? 'Normal' : 'High'}
+                        </div>
                       </div>
                       <div className="text-center p-4 border rounded-lg">
-                        <div className="text-2xl font-bold">{systemMetrics.activeConnections}</div>
+                        <div className={`text-2xl font-bold ${systemMetrics.activeConnections < 50 ? 'text-green-600' : systemMetrics.activeConnections < 100 ? 'text-yellow-600' : 'text-red-600'}`}>
+                          {systemMetrics.activeConnections}
+                        </div>
                         <div className="text-sm text-muted-foreground">Active Connections</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {systemMetrics.activeConnections < 50 ? 'Normal' : systemMetrics.activeConnections < 100 ? 'High' : 'Very High'}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
+                {/* Real-time Metrics */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Real-time Metrics</CardTitle>
+                    <CardDescription>
+                      Live system performance indicators
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium">Revenue Health</span>
+                          <span className={`text-sm font-bold ${systemMetrics.monthlyRevenue > 1000 ? 'text-green-600' : 'text-yellow-600'}`}>
+                            {formatCurrency(systemMetrics.monthlyRevenue)}/mo
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${systemMetrics.monthlyRevenue > 1000 ? 'bg-green-600' : 'bg-yellow-600'}`}
+                            style={{ width: `${Math.min((systemMetrics.monthlyRevenue / 5000) * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium">User Activity</span>
+                          <span className={`text-sm font-bold ${systemMetrics.activeUsers / systemMetrics.totalUsers > 0.5 ? 'text-green-600' : 'text-yellow-600'}`}>
+                            {Math.round((systemMetrics.activeUsers / systemMetrics.totalUsers) * 100)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${systemMetrics.activeUsers / systemMetrics.totalUsers > 0.5 ? 'bg-green-600' : 'bg-yellow-600'}`}
+                            style={{ width: `${(systemMetrics.activeUsers / systemMetrics.totalUsers) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium">Subscription Health</span>
+                          <span className={`text-sm font-bold ${systemMetrics.activeSubscriptions / systemMetrics.totalSubscriptions > 0.8 ? 'text-green-600' : 'text-yellow-600'}`}>
+                            {Math.round((systemMetrics.activeSubscriptions / systemMetrics.totalSubscriptions) * 100)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${systemMetrics.activeSubscriptions / systemMetrics.totalSubscriptions > 0.8 ? 'bg-green-600' : 'bg-yellow-600'}`}
+                            style={{ width: `${(systemMetrics.activeSubscriptions / systemMetrics.totalSubscriptions) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium">System Load</span>
+                          <span className={`text-sm font-bold ${systemMetrics.activeConnections < 50 ? 'text-green-600' : systemMetrics.activeConnections < 100 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {Math.round((systemMetrics.activeConnections / 100) * 100)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${systemMetrics.activeConnections < 50 ? 'bg-green-600' : systemMetrics.activeConnections < 100 ? 'bg-yellow-600' : 'bg-red-600'}`}
+                            style={{ width: `${Math.min((systemMetrics.activeConnections / 100) * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Recent Alerts */}
                 {systemMetrics.recentAlerts.length > 0 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Recent Alerts</CardTitle>
+                      <CardTitle>Recent System Alerts</CardTitle>
+                      <CardDescription>
+                        Latest system events and notifications
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
@@ -670,6 +862,11 @@ export function AdminDashboard({ user }: AdminDashboardProps) {
                                   </span>
                                   {alert.resolved && (
                                     <CheckCircle className="h-4 w-4 text-green-500" />
+                                  )}
+                                  {!alert.resolved && (
+                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                      <MoreHorizontal className="h-3 w-3" />
+                                    </Button>
                                   )}
                                 </div>
                               </div>
