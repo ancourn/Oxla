@@ -1,7 +1,7 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Looking for ways to speed up your queries, scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
@@ -17,8 +17,21 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  avatar   String?
+  bio      String?
+  password String?
+  role      String   @default("user")
+  plan      String   @default("free")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  posts     Post[]
+  chatSessions ChatSession[]
+  searchHistory SearchHistory[]
+  userProfile UserProfile[]
+  userPlan   UserPlan[]
+  subscriptions Subscription[]
+  payments   Payment[]
 }
 
 model Post {
@@ -29,4 +42,107 @@ model Post {
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  title    String?
+  userId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  role     String
+  content  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  query    String
+  results  String?
+  userId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId   String   @unique
+  website  String?
+  location String?
+  bio      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Plan {
+  id        String   @id @default(cuid())
+  name      String   // "Free", "Pro", "Enterprise"
+  price     Decimal  // 0.00, 9.99, 99.99
+  currency  String   // "USD", "EUR"
+  features  String   // JSON string of features
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+  userPlans     UserPlan[]
+}
+
+model Subscription {
+  id          String   @id @default(cuid())
+  userId      String
+  planId      String
+  status      String   // "active", "cancelled", "expired"
+  startedAt  DateTime
+  endedAt    DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  payments   Payment[]
+}
+
+model UserPlan {
+  id      String   @id @default(cuid())
+  userId  String   @unique
+  planId  String
+  usage   String   // JSON string of usage data
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  userId      String
+  subscriptionId String
+  amount      Decimal
+  currency    String
+  status      String   // "pending", "completed", "failed"
+  gateway     String   // "stripe", "paypal"
+  transactionId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 }
