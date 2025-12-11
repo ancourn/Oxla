@@ -22,3 +22,13 @@ redis==5.0.1
 prometheus-client==0.19.0
 prometheus-fastapi-instrumentator==6.1.0
 flower==2.0.1
+
+# ClamAV virus scanning (socket-based communication)
+# Note: pyclamd is optional, we use native socket communication
+
+# Additional security packages
+cryptography>=41.0.0
+
+# Testing enhancements
+pytest-cov==4.1.0
+pytest-mock==3.12.0

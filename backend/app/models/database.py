@@ -202,8 +202,62 @@ class DriveShare(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     accessed_at = Column(DateTime, nullable=True)
     
+    # Enhanced sharing features
+    password_hash = Column(String(255), nullable=True)  # Optional password protection
+    max_downloads = Column(Integer, nullable=True)  # Optional download limit
+    download_count = Column(Integer, default=0, nullable=False)  # Track downloads
+    
     # Relationships
     file = relationship("DriveFile", back_populates="shares")
+    access_logs = relationship("ShareAccessLog", back_populates="share")
+
+
+class ShareAccessLog(Base):
+    """Track all access attempts to shared files for analytics and security"""
+    __tablename__ = "share_access_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    share_id = Column(Integer, ForeignKey("drive_shares.id"), nullable=False)
+    
+    # Access details
+    access_type = Column(String(20), nullable=False)  # view, download, password_attempt
+    success = Column(Boolean, default=True, nullable=False)
+    
+    # Client information
+    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
+    user_agent = Column(String(500), nullable=True)
+    referer = Column(String(500), nullable=True)
+    country = Column(String(2), nullable=True)  # ISO country code
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    share = relationship("DriveShare", back_populates="access_logs")
+
+
+class FileAccessAudit(Base):
+    """Audit log for all file access by authenticated users"""
+    __tablename__ = "file_access_audits"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    file_id = Column(Integer, ForeignKey("drive_files.id"), nullable=False)
+    
+    # Action details
+    action = Column(String(50), nullable=False)  # upload, download, delete, view, share
+    details = Column(Text, nullable=True)  # JSON with additional context
+    
+    # Client information
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User")
+    file = relationship("DriveFile")
 
 # Database setup
 from sqlalchemy import create_engine

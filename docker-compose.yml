@@ -136,11 +136,72 @@ services:
     networks:
       - oxlas-network
 
+  clamav:
+    image: clamav/clamav:latest
+    container_name: oxlas-clamav
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+      - ./drive_storage:/scan:ro
+    networks:
+      - oxlas-network
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 60s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oxlas-backend
+    environment:
+      - DATABASE_URL=sqlite:///./oxlas.db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - CLAMAV_HOST=clamav
+      - CLAMAV_PORT=3310
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - clamav
+    volumes:
+      - ./backend:/app
+      - ./drive_storage:/app/drive_storage
+    networks:
+      - oxlas-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oxlas-celery-worker
+    environment:
+      - DATABASE_URL=sqlite:///./oxlas.db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - CLAMAV_HOST=clamav
+      - CLAMAV_PORT=3310
+    depends_on:
+      - redis
+      - clamav
+    volumes:
+      - ./backend:/app
+      - ./drive_storage:/app/drive_storage
+    networks:
+      - oxlas-network
+    command: celery -A app.celery_app worker --loglevel=info
+
 volumes:
   postgres_data:
   redis_data:
   prometheus_data:
   grafana_data:
+  clamav_data:
 
 networks:
   oxlas-network:
