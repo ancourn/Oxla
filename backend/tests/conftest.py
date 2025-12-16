@@ -46,3 +46,28 @@ def auth_headers(test_user):
     return {
         "Authorization": f"Bearer {test_user['access_token']}"
     }
+
+@pytest.fixture
+def db_session():
+    """Provide a database session for tests."""
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@pytest.fixture
+def create_test_user(client):
+    """Factory fixture to create test users with custom credentials."""
+    def _create_user(email, password, name=None):
+        user_data = {
+            "name": name or f"Test User {email}",
+            "email": email,
+            "password": password
+        }
+        response = client.post("/auth/register", json=user_data)
+        assert response.status_code == 200
+        return {
+            "Authorization": f"Bearer {response.json()['access_token']}"
+        }
+    return _create_user
